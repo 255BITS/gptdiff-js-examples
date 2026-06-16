@@ -135,7 +135,15 @@ async function serveStatic(req, res) {
   }
 }
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`NanoGPT proxy → http://localhost:${PORT}`);
   console.log(`Model: ${MODEL}   Auth: ${process.env.NANOGPT_AUTH || "env"}`);
+  // Warm the key at startup so OAuth sign-in (if enabled) happens now — opening the
+  // browser at boot — instead of hanging the first /api/chat request mid-stream.
+  try {
+    await getApiKey();
+    console.log("Auth ready ✓");
+  } catch (e) {
+    console.error("Auth not ready: " + e.message);
+  }
 });
