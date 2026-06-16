@@ -62,10 +62,8 @@ async function registerClient(redirectUri) {
   return id;
 }
 
-// NanoGPT needs a loopback IP, not "localhost".
 function redirectUriFor(req) {
-  const host = (req.headers.host || "127.0.0.1").replace(/^localhost(?=$|:)/, "127.0.0.1");
-  return `http://${host}/`;
+  return `http://${req.headers.host || "127.0.0.1"}/`;
 }
 
 async function authLogin(req, res) {
@@ -92,17 +90,20 @@ async function authCallback(req, res, params) {
     (pending ? ` client=${pending.clientId} redirect=${pending.redirectUri}` : ""));
   const fail = (msg) => { res.writeHead(400, { "Content-Type": "text/html" }); res.end(`<h2>Sign-in failed</h2><pre>${msg}</pre><a href="/">back</a>`); };
   if (!pending) return fail("sign-in expired or state mismatch — try again");
+  // The code is bound to the host NanoGPT actually redirected to (it flips 127.0.0.1<->localhost),
+  // so exchange with the callback's own host — not what we sent at authorize.
+  const redirectUri = `http://${req.headers.host}/`;
   const r = await fetch(`${NANOGPT}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code", client_id: pending.clientId,
-      redirect_uri: pending.redirectUri, code: params.get("code"), code_verifier: pending.verifier,
+      redirect_uri: redirectUri, code: params.get("code"), code_verifier: pending.verifier,
     }),
   });
   if (!r.ok) return fail(await r.text());
   setRuntimeKey((await r.json()).access_token);
-  console.log("Signed in via OAuth ✓");
+  console.log(`[oauth] exchanged with redirect=${redirectUri} → signed in ✓`);
   res.writeHead(302, { Location: "/" }); // clean URL; page now reports "via OAuth ✓"
   res.end();
 }
