@@ -7,6 +7,7 @@
 // Run: NANOGPT_API_KEY=sk-nano-... npm start    (or: node server.mjs)
 
 import http from "node:http";
+import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
@@ -22,12 +23,16 @@ const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "text/javascrip
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === "POST" && req.url === "/api/chat") return await chat(req, res);
-    if (req.method === "GET" && req.url === "/api/auth") {
+    const u = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    if (req.method === "POST" && u.pathname === "/api/chat") return await chat(req, res);
+    if (req.method === "GET" && u.pathname === "/api/auth") {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ mode: authStatus() }));
     }
-    if (req.method === "POST" && req.url === "/api/auth/exchange") return await authExchange(req, res);
+    if (req.method === "GET" && u.pathname === "/api/auth/login") return await authLogin(req, res);
+    // OAuth provider redirects back to "/?code=...&state=..." — handle it server-side.
+    if (req.method === "GET" && u.pathname === "/" && u.searchParams.has("code") && u.searchParams.has("state"))
+      return await authCallback(req, res, u.searchParams);
     return await serveStatic(req, res);
   } catch (e) {
     if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
@@ -35,24 +40,68 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Browser-side PKCE hands us the code; we exchange it for a key and hold it in memory,
-// so the OAuth key — not the env key — is used from here on.
-async function authExchange(req, res) {
-  const { code, code_verifier, client_id, redirect_uri } = JSON.parse((await readBody(req)) || "{}");
-  if (!code || !code_verifier || !client_id || !redirect_uri) throw new Error("missing PKCE fields");
+// --- Server-owned OAuth PKCE. One client per redirect origin; verifier kept here, never
+// in the browser, so client/verifier state can't drift across attempts. ---
+const b64url = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const pendingPkce = new Map();      // state -> { verifier, clientId, redirectUri }
+const clientByRedirect = new Map(); // redirectUri -> client_id
+
+async function registerClient(redirectUri) {
+  if (clientByRedirect.has(redirectUri)) return clientByRedirect.get(redirectUri);
+  const r = await fetch(`${NANOGPT}/oauth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: "gptdiff local", redirect_uris: [redirectUri],
+      grant_types: ["authorization_code"], response_types: ["code"], token_endpoint_auth_method: "none",
+    }),
+  });
+  if (!r.ok) throw new Error(`register failed: ${r.status} ${await r.text()}`);
+  const id = (await r.json()).client_id;
+  clientByRedirect.set(redirectUri, id);
+  return id;
+}
+
+// NanoGPT needs a loopback IP, not "localhost".
+function redirectUriFor(req) {
+  const host = (req.headers.host || "127.0.0.1").replace(/^localhost(?=$|:)/, "127.0.0.1");
+  return `http://${host}/`;
+}
+
+async function authLogin(req, res) {
+  const redirectUri = redirectUriFor(req);
+  const clientId = await registerClient(redirectUri);
+  const verifier = b64url(crypto.randomBytes(32));
+  const challenge = b64url(crypto.createHash("sha256").update(verifier).digest());
+  const state = b64url(crypto.randomBytes(16));
+  pendingPkce.set(state, { verifier, clientId, redirectUri });
+  const authUrl = new URL(`${NANOGPT}/oauth/authorize`);
+  authUrl.search = new URLSearchParams({
+    response_type: "code", client_id: clientId, redirect_uri: redirectUri,
+    scope: "api.use models.read", state, code_challenge: challenge, code_challenge_method: "S256",
+  }).toString();
+  res.writeHead(302, { Location: authUrl.toString() });
+  res.end();
+}
+
+async function authCallback(req, res, params) {
+  const pending = pendingPkce.get(params.get("state"));
+  pendingPkce.delete(params.get("state"));
+  const fail = (msg) => { res.writeHead(400, { "Content-Type": "text/html" }); res.end(`<h2>Sign-in failed</h2><pre>${msg}</pre><a href="/">back</a>`); };
+  if (!pending) return fail("sign-in expired or state mismatch — try again");
   const r = await fetch(`${NANOGPT}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "authorization_code", client_id, redirect_uri, code, code_verifier }),
+    body: new URLSearchParams({
+      grant_type: "authorization_code", client_id: pending.clientId,
+      redirect_uri: pending.redirectUri, code: params.get("code"), code_verifier: pending.verifier,
+    }),
   });
-  if (!r.ok) {
-    res.writeHead(r.status, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ error: await r.text() }));
-  }
+  if (!r.ok) return fail(await r.text());
   setRuntimeKey((await r.json()).access_token);
   console.log("Signed in via OAuth ✓");
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ ok: true, mode: "oauth" }));
+  res.writeHead(302, { Location: "/" }); // clean URL; page now reports "via OAuth ✓"
+  res.end();
 }
 
 // gptdiff flow, streamed: diff the existing files against the goal, smartapply, return new files.
