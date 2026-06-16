@@ -130,6 +130,7 @@ async function run() {
   const path = $("path").value.trim() || "file.txt";
   const content = $("content").value;
   runBtn.disabled = true; acceptBtn.disabled = true; newContent = null; curPhase = "";
+  let noteMsg = "";
   $("diff").textContent = ""; $("result").textContent = "";
 
   // Live elapsed timer (client-side); metric values are pushed from the server.
@@ -160,6 +161,7 @@ async function run() {
         if (!t.startsWith("data:")) continue;
         const o = JSON.parse(t.slice(5).trim());
         if (o.t === "phase") $("phase").textContent = o.phase;
+        else if (o.t === "note") { noteMsg = o.note; $("result").textContent = "⚠ " + o.note; }
         else if (o.t === "text") appendText(o.phase, o.chunk);
         else if (o.t === "stream") { $("phase").textContent = o.phase; $("live").textContent = o.thinking ? `· thinking… ↑ ${n(o.outChars)} chars` : `· streaming ↑ ${n(o.outChars)} chars`; }
         else if (o.t === "usage") { $("inTok").textContent = n(o.inTok); $("outTok").textContent = n(o.outTok); $("cost").textContent = fmtCost(o.costUsd); $("live").textContent = ""; }
@@ -167,8 +169,10 @@ async function run() {
         else if (o.t === "done") {
           renderDiff(o.diff || "");
           newContent = o.files?.[path] ?? "(file was deleted)";
-          $("result").textContent = newContent;
-          acceptBtn.disabled = newContent === "(file was deleted)";
+          const unchanged = newContent === content;
+          // Keep the ⚠ note visible when nothing actually changed.
+          if (!(unchanged && noteMsg)) $("result").textContent = newContent;
+          acceptBtn.disabled = unchanged || newContent === "(file was deleted)";
         }
       }
     }

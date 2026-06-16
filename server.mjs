@@ -11,7 +11,7 @@ import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
-import { buildEnvironment, generateDiff, smartapply, callLlmForApply } from "gptdiff-js";
+import { buildEnvironment, generateDiff, smartapply, callLlmForApply, parseDiffPerFile } from "gptdiff-js";
 import { getApiKey, setRuntimeKey, authStatus } from "./auth.mjs";
 
 const NANOGPT = "https://nano-gpt.com";
@@ -174,12 +174,25 @@ async function chat(req, res) {
     return { choices: [{ message: { content } }] };
   };
 
+  const t0 = Date.now();
+  console.log(`[chat] goal=${JSON.stringify(instruction).slice(0, 70)} files=[${Object.keys(files).join(", ")}]`);
   try {
     const apiKey = await getApiKey();
     // existing -> diff
     const diff = await generateDiff(buildEnvironment(files), instruction, {
       apiKey, model: MODEL, callLlm: streamingCallLlm("Generating diff"),
     });
+
+    // Inspect the diff before applying so a no-op is visible, not silent.
+    const parsed = parseDiffPerFile(diff);
+    console.log(`[chat] diff ${diff.length} chars, parsed ${parsed.length} file(s): [${parsed.map(([p]) => p).join(", ")}]`);
+    if (!diff.trim() || !parsed.length) {
+      console.log(`[chat] no applicable diff — nothing to smartapply`);
+      send({ t: "note", note: "The model returned no applicable diff. Try rephrasing the goal." });
+      send({ t: "done", diff, files });
+      return res.end();
+    }
+
     // diff -> new files (reuse gptdiff's apply prompt, but with our streaming client)
     const applyLlm = streamingCallLlm("Applying diff");
     const updated = await smartapply(diff, files, {
@@ -187,8 +200,13 @@ async function chat(req, res) {
       callLlmForApply: (p, original, fileDiff, model, opts) =>
         callLlmForApply(p, original, fileDiff, model, { ...opts, callLlm: applyLlm }),
     });
+
+    const changed = Object.keys({ ...files, ...updated }).filter((p) => files[p] !== updated[p]);
+    console.log(`[chat] smartapply done in ${Date.now() - t0}ms — changed: [${changed.join(", ") || "none"}]`);
+    if (!changed.length) send({ t: "note", note: "smartapply produced no change to the file(s)." });
     send({ t: "done", diff, files: updated });
   } catch (e) {
+    console.error(`[chat] error after ${Date.now() - t0}ms:`, e);
     send({ t: "error", error: e.message });
   }
   res.end();
