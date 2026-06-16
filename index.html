@@ -44,6 +44,11 @@
   .tag { font-family: system-ui, sans-serif; font-size: 10px; padding: .05rem .35rem; border-radius: .6rem; white-space: nowrap; }
   .tag.priv { background: #3b82f622; color: #2563eb; }
   .tag.closed { background: #f59e0b22; color: #b45309; }
+  #playmodal { position: fixed; inset: 0; background: #000a; display: none; align-items: center; justify-content: center; z-index: 50; }
+  #playmodal.open { display: flex; }
+  .play-card { background: #fff; color: #111; border-radius: .6rem; overflow: hidden; width: min(94vw, 420px); box-shadow: 0 12px 48px #000a; }
+  .play-bar { display: flex; justify-content: space-between; align-items: center; padding: .45rem .7rem; background: #f1f1f1; font-size: .85rem; }
+  #playframe { border: 0; width: 100%; height: 540px; display: block; background: #0f0f1a; }
   .spin { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
@@ -72,15 +77,72 @@
 </div>
 
 <label for="path">File path</label>
-<input id="path" value="greet.py" />
+<input id="path" value="index.html" />
 
-<label for="content">Existing file</label>
-<textarea id="content" rows="8">def greet(name):
-    print("hello " + name)
+<label for="content">Existing file — a tiny playable game</label>
+<textarea id="content" rows="14"><!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Power Dash</title>
+<style>
+  body{margin:0;background:#0f0f1a;color:#eee;font:16px system-ui;text-align:center}
+  h3{margin:.6rem}
+  canvas{background:#1b1b2b;border-radius:8px;touch-action:none}
+  #hud{font:14px ui-monospace,monospace;min-height:1.2em}
+  .legend{font-size:12px;opacity:.7;margin:.4rem}
+</style>
+</head>
+<body>
+<h3>Power Dash</h3>
+<div id="hud">Score: 0</div>
+<canvas id="c" width="360" height="460"></canvas>
+<div class="legend">arrow keys move &middot; star +1 &middot; bomb -5 &middot; green=speed blue=shield gold=double</div>
+<script>
+const c=document.getElementById('c'), g=c.getContext('2d');
+let px=157, pw=46, speed=5, keys={}, items=[], score=0, frame=0, fx={};
+// Power-ups last a few seconds. Add your own in the goal box and let the AI patch it in!
+const ICON={star:'STAR',bomb:'BOMB',speed:'SPD',shield:'SHLD',double:'x2'};
+const COLOR={star:'#f6c945',bomb:'#ff5470',speed:'#39d353',shield:'#4fd1c5',double:'#c084fc'};
+addEventListener('keydown',e=>{keys[e.key]=1; if(e.key.indexOf('Arrow')===0)e.preventDefault();});
+addEventListener('keyup',e=>{keys[e.key]=0;});
+function spawn(){
+  const r=Math.random();
+  const type = r<0.12?'speed' : r<0.22?'shield' : r<0.32?'double' : r<0.5?'bomb' : 'star';
+  items.push({type, x:20+Math.random()*320, y:-20, vy:2+Math.random()*2.5});
+}
+function collect(it){
+  if(it.type==='star') score += fx.double?2:1;
+  else if(it.type==='bomb'){ if(!fx.shield) score=Math.max(0,score-5); }
+  else fx[it.type]=320;
+}
+function loop(){
+  frame++; if(frame%38===0) spawn();
+  const s = speed*(fx.speed?1.8:1);
+  if(keys['ArrowLeft']) px-=s;
+  if(keys['ArrowRight']) px+=s;
+  px=Math.max(0,Math.min(360-pw,px));
+  for(const it of items){ it.y+=it.vy;
+    if(it.y>440 && it.y<462 && it.x>px-10 && it.x<px+pw+10){ collect(it); it.dead=1; } }
+  items=items.filter(it=>!it.dead && it.y<482);
+  for(const k in fx){ if(--fx[k]<=0) delete fx[k]; }
+  g.clearRect(0,0,360,460);
+  g.fillStyle = fx.shield?'#4fd1c5':'#f6c945';
+  g.fillRect(px,442,pw,14);
+  g.font='bold 13px ui-monospace,monospace'; g.textAlign='center';
+  for(const it of items){ g.fillStyle=COLOR[it.type]; g.fillText(ICON[it.type],it.x,it.y); }
+  document.getElementById('hud').textContent='Score: '+score+(Object.keys(fx).length?'  ['+Object.keys(fx).join(' ')+']':'');
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
 </textarea>
+<button id="play" class="go" style="margin-top:.4rem">▶ Play this file</button>
 
 <label for="goal">Goal (what to change)</label>
-<input id="goal" value="Make greet() return the string instead of printing, and add a type hint." />
+<input id="goal" value="Add a purple magnet power-up that briefly pulls nearby stars toward the paddle." />
 
 <button id="run" class="go">Diff &amp; apply</button>
 
@@ -97,6 +159,13 @@
   <div><label>New file (after smartapply)</label><pre id="result"></pre></div>
 </div>
 <button id="accept" class="go" disabled>⤺ Replace editor with new file</button>
+
+<div id="playmodal">
+  <div class="play-card">
+    <div class="play-bar"><span>▶ Preview — <b id="playtitle">index.html</b></span><button id="playclose" class="link">✕ close</button></div>
+    <iframe id="playframe" sandbox="allow-scripts" title="game preview"></iframe>
+  </div>
+</div>
 
 <script type="module">
 import { buildEnvironment, generateDiff, smartapply, parseDiffPerFile, callLlmForApply, setEnv }
@@ -423,6 +492,15 @@ async function run() {
 
 $("run").addEventListener("click", run);
 $("accept").addEventListener("click", () => { if (newContent != null) { $("content").value = newContent; $("accept").disabled = true; } });
+
+// ---------- play modal: render the current file in a sandboxed iframe ----------
+const playModal = $("playmodal"), playFrame = $("playframe");
+function openPlay() { $("playtitle").textContent = $("path").value.trim() || "file"; playFrame.srcdoc = $("content").value; playModal.classList.add("open"); }
+function closePlay() { playModal.classList.remove("open"); playFrame.srcdoc = ""; }
+$("play").addEventListener("click", openPlay);
+$("playclose").addEventListener("click", closePlay);
+playModal.addEventListener("click", (e) => { if (e.target === playModal) closePlay(); });
+addEventListener("keydown", (e) => { if (e.key === "Escape" && playModal.classList.contains("open")) closePlay(); });
 
 // ---------- boot ----------
 (async () => {
