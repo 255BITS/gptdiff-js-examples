@@ -381,7 +381,7 @@ function paintUsage() {
   $("cost").textContent = fmtCost(prog.cost + prog.liveCost); // committed + in-flight estimate
 }
 function streamingCallLlm(phase) {
-  return async ({ apiKey, baseUrl, model, messages, maxTokens = 30000, temperature = 1.0 }) => {
+  return async ({ apiKey, baseUrl, model, messages, maxTokens = null, temperature = 1.0 }) => {
     $("phase").textContent = phase;
     const inEst = messages.reduce((s, m) => s + words(typeof m.content === "string" ? m.content : JSON.stringify(m.content)), 0);
     // Live cost estimate = approximated tokens × the selected model's per-token price
@@ -396,7 +396,9 @@ function streamingCallLlm(phase) {
     try {
       r = await fetch(endpoint, {
         method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature, stream: true }),
+        // No max_tokens by default → let the model emit its full output (avoids silent
+        // truncation that produces an unparseable diff). Callers may still pass a cap.
+        body: JSON.stringify({ model, messages, ...(maxTokens ? { max_tokens: maxTokens } : {}), temperature, stream: true }),
       });
     } catch (e) { prog.liveIn -= inEst; prog.liveCost -= myCost; throw e; }
     if (!r.ok) { prog.liveIn -= inEst; prog.liveCost -= myCost; throw new Error(`LLM ${r.status}: ${await r.text()}`); }
