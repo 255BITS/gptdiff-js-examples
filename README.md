@@ -4,7 +4,7 @@ Runnable, self-contained example apps built on **[gptdiff-js](https://github.com
 **generate a unified diff and smartapply it**, entirely in the browser, powered by
 [NanoGPT](https://nano-gpt.com/r/mgzwtqjw). No server, no build, no install.
 
-**Live demos** · [diff → smartapply](https://255bits.github.io/gptdiff-js-examples/) · [realtime video overlay](https://255bits.github.io/gptdiff-js-examples/overlay.html)
+**Live demos** · [diff → smartapply](https://255bits.github.io/gptdiff-js-examples/) · [realtime video overlay](https://255bits.github.io/gptdiff-js-examples/overlay.html) · [3d object studio](https://255bits.github.io/gptdiff-js-examples/object3d.html) · [AI-liftoff comic](https://255bits.github.io/gptdiff-js-examples/comic.html) · [count to 100](https://255bits.github.io/gptdiff-js-examples/count.html)
 
 > **The gptdiff family** —
 > [**gptdiff**](https://github.com/255BITS/gptdiff) (CLI + Python API) ·
@@ -88,8 +88,103 @@ back to an identical copy embedded in the page.
 npx serve .      # then open http://localhost:3000/overlay.html
 ```
 
+## 3d object studio (`object3d.html`)
+
+A multi-file project that renders in **3D**: gptdiff edits the geometry (`object.js`), the
+material (`material.js`), an SVG `texture.svg`, the lighting/animation (`effects.js`) and a
+`scene.json` config; the preview on the right rebuilds the object live with [Three.js](https://threejs.org)
+and **OrbitControls** (drag to orbit, scroll to zoom). Describe a change in the **Goal** box
+("turn it into a glowing crystal") and *all* the files are rewritten at once.
+
+Same virtual-FS + sandboxed `<iframe srcdoc>` + **mini-bundler** pattern as the overlay:
+
+- `<!-- include-config: scene.json -->` → `<script>window.SCENE_CONFIG = {…}</script>`
+- `<!-- include-texture: texture.svg -->` → `window.SCENE_TEXTURE_SVG` (the SVG as a data URL)
+- local `<script src="object.js">` (and `material.js`, `effects.js`) → inlined; the Three.js
+  importmap / CDN `<script>` is left untouched
+
+**Download** exports a real 3D-modelling file — `.glb` (binary glTF, embeds the material + the
+SVG texture) or `.obj` (geometry-only, universal) — that imports straight into Blender, Maya,
+Unity, or Three.js. The exporter runs inside the sandboxed preview and hands the bytes to the
+page via `postMessage`, which triggers the download.
+
+The seed project lives in `object3d/` (`preview.html`, `scene.json`, `object.js`, `material.js`,
+`texture.svg`, `effects.js`); served, `object3d.html` fetches it, and via `file://` it falls
+back to an embedded copy.
+
+```bash
+npx serve .      # then open http://localhost:3000/object3d.html
+```
+
+## AI-liftoff comic (`comic.html`)
+
+A demo where the re-render actually **generates an image**. It's a comic page —
+*LIFTOFF*, a cyborg (NOVA) and an emergent AI (HELIX) living through the moment of AI
+liftoff — built from a multi-file project: a JSON art-direction `config.json` (shared **style**
++ **palette** + a **character bible**) and one JSON file per **panel** under `panels/`
+(`span`, `shot`, `cast`, `scene`, `caption`, `dialogue`, `fx`).
+
+Describe a change in the **Goal** box ("make it more action packed") and gptdiff rewrites the
+config + panels — **adding or removing panels** as it sees fit. The harness then **organizes
+every panel into one prompt** (style + character bible + each panel's scene/caption/dialogue/FX,
+in reading order) and draws the **whole portrait page in a single `gpt-image-2` render** via
+NanoGPT's OpenAI-compatible image endpoint — the model lays out the panels, gutters and
+lettering itself:
+
+```
+POST https://nano-gpt.com/v1/images/generations
+{ "model": "gpt-image-2", "prompt": <one prompt for the entire page>, "n": 1,
+  "size": "1024x1536", "response_format": "b64_json" }   ──▶  { data: [{ b64_json }], cost }
+```
+
+Because the character bible is pinned into the one prompt ("keep these characters consistent in
+every panel"), NOVA and HELIX stay recognizable across the page. The result is **cached per
+prompt hash**, so re-running an unchanged page is free; **🎲 new take** forces a fresh sample,
+and the composed prompt is shown under the page so you can see exactly what was sent.
+
+The seed project lives in `comic/` (`config.json` + `panels/*.json`); served, `comic.html`
+fetches it, and via `file://` it falls back to an embedded copy. **Export PNG** downloads the
+rendered page.
+
+> Image generation is **not free** — nothing is drawn until you click **🎨 render page** (or run
+> a goal with auto-render on). Each render is **one** `gpt-image-2` call (a 1024×1536 page;
+> NanoGPT returns the exact `cost`).
+
+```bash
+npx serve .      # then open http://localhost:3000/comic.html
+```
+
+## Count to 100 (`count.html`)
+
+A third demo that turns gptdiff into a **reliability loop**. There's one uneditable file —
+`count` — holding a single integer. Each step the harness asks gptdiff to *add 1*, applies the
+diff, and **verifies** the result is exactly the previous number plus one:
+
+```
+for (i = 0; count < 100; i++):
+    diff  = generateDiff({ count }, "increment by exactly 1")
+    count = Number(smartapply(diff).count)
+    if count !== prev + 1:  FAIL and stop
+PASS when count reaches 100
+```
+
+The loop ends three ways, each spelled out: it **passes** when it reaches 100 (every step
+verified), **fails** the instant a step doesn't land on n+1 (showing what the model wrote vs.
+what was expected), or **stops** when you press **Stop** — which aborts the in-flight call and
+makes clear it was a user interruption, not a pass or fail. Cumulative tokens/cost and a
+per-step log show what counting to 100 actually costs on the selected model.
+
+```bash
+npx serve .      # then open http://localhost:3000/count.html
+```
+
 ## Files
 
 - `index.html` — the single-file diff → smartapply demo (builds a playable game).
 - `overlay.html` — the multi-file realtime video-overlay demo (virtual FS + live preview + export).
 - `overlay/` — the seed overlay project (SVG layers, GSAP timeline, JSON config, preview).
+- `object3d.html` — the multi-file 3D object studio (Three.js preview + drag-to-orbit + `.glb`/`.obj` export).
+- `object3d/` — the seed 3D project (`object.js` geometry, `material.js`, `texture.svg`, `effects.js`, `scene.json`, preview).
+- `comic.html` — the AI-liftoff comic; the whole page is drawn in one `gpt-image-2` render via NanoGPT.
+- `comic/` — the seed comic project (`config.json` art direction + `panels/*.json`).
+- `count.html` — the count-to-100 reliability loop (diff → apply → verify n+1, pass / fail / stop).
