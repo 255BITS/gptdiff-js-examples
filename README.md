@@ -2,7 +2,7 @@
 
 Runnable, self-contained example apps built on **[gptdiff-js](https://github.com/255BITS/gptdiff-js)**:
 **generate a unified diff and smartapply it**, entirely in the browser, powered by
-[NanoGPT](https://nano-gpt.com). No server, no build, no install.
+[NanoGPT](https://nano-gpt.com/r/mgzwtqjw). No server, no build, no install.
 
 **Live demos** · [diff → smartapply](https://255bits.github.io/gptdiff-js-examples/) · [realtime video overlay](https://255bits.github.io/gptdiff-js-examples/overlay.html)
 
@@ -26,7 +26,7 @@ Open the page, authenticate one of two ways, then edit the file + goal and hit *
 
 - **Sign in with NanoGPT** — browser OAuth (PKCE). Requires the page be served over http
   (loopback) or https, since OAuth redirects there. The key is stored in `localStorage`.
-- **paste key** — paste a key from <https://nano-gpt.com> → Settings → API. Works even when
+- **paste key** — paste a key from [nano-gpt.com](https://nano-gpt.com/r/mgzwtqjw) → Settings → API. Works even when
   the file is opened directly (`file://`).
 
 ### Serve it locally (for OAuth)
