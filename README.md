@@ -182,7 +182,7 @@ diff) is tucked behind an **under-the-hood** reveal so the stage stays clean for
 
 **Nothing about MARVIS is hardcoded** — the whole character is config files that hot-reload as you
 type and travel in save/share. Alongside the six story files there are three config files (shown
-gold, and *hidden from the model* so it can never rewrite its own instructions):
+gold):
 
 - `config.json` — name, the page copy (title, tagline, role), the image model/size, and the
   **default direction** sent when you leave the box blank.
@@ -190,8 +190,11 @@ gold, and *hidden from the model* so it can never rewrite its own instructions):
   next ▶ continue obeys the new rules instantly.
 - `style.css` — this page's entire theme. Edit it and the page re-skins live.
 
-So you can rename it, restyle it, or rewrite how it thinks on stage, and it's still all yours —
-those edits save and share like everything else.
+And **gptdiff sees all of them** — so MARVIS can change *everything*: rename itself in `config.json`,
+re-skin the lab in `style.css` (an alarm turns the page red), even evolve its own `brief.md`. After
+every beat the config and theme are re-applied, so a self-edit takes effect immediately. The brief
+asks it to treat those meta-files as rare, deliberate moves rather than every-beat edits. You can do
+the same by hand, and either way it all saves and shares like the rest.
 
 When `portrait.md` changes (or you press **🎨 render face**), its face is drawn from that file
 with **`seedream-v5.0-lite`** via NanoGPT's image endpoint, and flows straight into its chat
