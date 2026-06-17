@@ -80,53 +80,56 @@
 <label for="path">File path</label>
 <input id="path" value="index.html" />
 
-<label for="content">Existing file — a plain little game (spice it up with the goal below)</label>
-<textarea id="content" rows="14"><!doctype html>
+<label for="content">Existing file — just notes &amp; pseudocode (let the AI build it)</label>
+<textarea id="content" rows="16"><!doctype html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>Catcher</title>
-<style>
-  body{margin:0;background:#222;color:#ddd;font:16px system-ui;text-align:center}
-  h3{margin:.6rem;font-weight:normal}
-  canvas{background:#000;display:block;margin:12px auto}
-  #s{font:14px ui-monospace,monospace}
-</style>
+  <meta charset="utf-8">
+  <title>My Game</title>
+  <!-- NOTES
+    Build a small arcade game on a <canvas>, dark background, centered.
+    Keep it one self-contained file: inline <style> and <script>, no libraries.
+  -->
 </head>
 <body>
-<h3>Catcher</h3>
-<div id="s">Score: 0</div>
-<canvas id="c" width="420" height="560"></canvas>
-<script>
-// A very plain game: move the gray paddle with the arrow keys and catch the
-// falling white blocks for 1 point each. That's it. Ask the AI to make it fun.
-const c=document.getElementById('c'), g=c.getContext('2d');
-let px=178, pw=64, keys={}, blocks=[], score=0, f=0;
-addEventListener('keydown',e=>{keys[e.key]=1; if(e.key.indexOf('Arrow')===0)e.preventDefault();});
-addEventListener('keyup',e=>{keys[e.key]=0;});
-function loop(){
-  f++; if(f%45===0) blocks.push({x:20+Math.random()*380, y:-12, v:3});
-  if(keys['ArrowLeft']) px-=6;
-  if(keys['ArrowRight']) px+=6;
-  px=Math.max(0,Math.min(420-pw,px));
-  for(const b of blocks){ b.y+=b.v;
-    if(b.y>540 && b.x>px-6 && b.x<px+pw+6){ score++; b.dead=1; } }
-  blocks=blocks.filter(b=>!b.dead && b.y<580);
-  g.clearRect(0,0,420,560);
-  g.fillStyle='#888'; g.fillRect(px,542,pw,12);
-  g.fillStyle='#fff'; for(const b of blocks) g.fillRect(b.x-6,b.y-6,12,12);
-  document.getElementById('s').textContent='Score: '+score;
-  requestAnimationFrame(loop);
-}
-loop();
-</script>
+  <!--
+    LAYOUT
+    - title + a score readout (#score)
+    - <canvas id="game" width="480" height="600">
+    - simple on-screen hint for the controls
+  -->
+
+  <script>
+    // ===== PSEUDOCODE — not implemented yet =====
+    //
+    // STATE
+    //   player { x, y, w, h, speed }      // sits near the bottom
+    //   bullets[]                          // player shots, move up
+    //   enemies[] = grid of aliens         // rows x cols near the top
+    //   enemyDir = +1                      // march right, then flip + step down
+    //   score = 0, gameOver = false
+    //
+    // INPUT
+    //   ArrowLeft / ArrowRight -> move player
+    //   Space -> fire a bullet (rate-limited)
+    //
+    // EACH FRAME (requestAnimationFrame)
+    //   move player by input (clamp to canvas)
+    //   move bullets up; drop the ones off-screen
+    //   move enemy block horizontally; if it hits an edge, flip dir + step down
+    //   collisions: bullet vs enemy -> remove both, score += 10
+    //   lose if any enemy reaches the player's row
+    //   draw everything; draw "GAME OVER" when done
+    //
+    // TODO: turn the above into a real, playable game.
+  </script>
 </body>
 </html>
 </textarea>
 <button id="play" class="go" style="margin-top:.4rem">▶ Play this file</button>
 
 <label for="goal">Goal (what to change)</label>
-<input id="goal" value="Add colorful power-ups: a gold block that doubles points for 5s and a green block that speeds up the paddle. Show active power-ups on screen." />
+<input id="goal" value="Implement these notes as a fully playable Space Invaders: a ship that moves with arrow keys and shoots with space, rows of aliens that march and drop, bullet-vs-alien collisions, a score, and a game-over state." />
 
 <button id="run" class="go">Diff &amp; apply</button>
 
