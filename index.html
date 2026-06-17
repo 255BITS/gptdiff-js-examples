@@ -127,9 +127,8 @@ TODO: turn this plan into a real, playable game.</textarea>
 
 <div class="cols" style="margin-top:1rem">
   <div><label>Generated diff</label><pre id="diff" class="diff"></pre></div>
-  <div><label>New file (after smartapply)</label><pre id="result"></pre></div>
+  <div><label>New file — applied to the editor automatically</label><pre id="result"></pre></div>
 </div>
-<button id="accept" class="go" disabled>⤺ Replace editor with new file</button>
 
 <footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #8883;font-size:.85rem">
   <b>Other examples</b> · <a href="overlay.html">🎬 realtime video overlay</a>
@@ -419,7 +418,7 @@ function streamingCallLlm(phase) {
 }
 
 // ---------- diff lab ----------
-let curPhase = "", newContent = null;
+let curPhase = "";
 function appendText(phase, chunk) {
   const pane = phase.startsWith("Generating") ? $("diff") : $("result");
   if (phase !== curPhase) { curPhase = phase; pane.textContent = ""; }
@@ -445,7 +444,7 @@ async function run() {
   const path = $("path").value.trim() || "file.txt";
   const content = $("content").value;
   const files = { [path]: content };
-  $("run").disabled = true; $("accept").disabled = true; newContent = null; curPhase = "";
+  $("run").disabled = true; curPhase = "";
   $("diff").textContent = ""; $("result").textContent = "";
   prog.inDone = prog.outDone = prog.cost = prog.liveIn = prog.liveOut = 0; paintUsage();
   $("progress").style.display = "block";
@@ -468,10 +467,16 @@ async function run() {
         callLlmForApply: (p, o, d, m, o2) => callLlmForApply(p, o, d, m, { ...o2, callLlm: applyLlm }),
       });
       renderDiff(diff);
-      newContent = updated[path] ?? "(file was deleted)";
-      const unchanged = newContent === content;
-      $("result").textContent = unchanged ? "⚠ smartapply produced no change." : newContent;
-      $("accept").disabled = unchanged || newContent === "(file was deleted)";
+      const result = updated[path] ?? "(file was deleted)";
+      if (result === content) {
+        $("result").textContent = "⚠ smartapply produced no change.";
+      } else if (result === "(file was deleted)") {
+        $("result").textContent = "⚠ smartapply deleted the file.";
+      } else {
+        $("content").value = result;   // apply to the editor automatically — no button needed
+        $("result").textContent = result;
+        updatePlayState();
+      }
     }
     $("phase").textContent = "done";
     document.querySelector("#progress .spin").style.display = "none";
@@ -485,7 +490,6 @@ async function run() {
 }
 
 $("run").addEventListener("click", run);
-$("accept").addEventListener("click", () => { if (newContent != null) { $("content").value = newContent; $("accept").disabled = true; updatePlayState(); } });
 
 // ---------- play modal: render the current file in a sandboxed iframe ----------
 const playModal = $("playmodal"), playFrame = $("playframe");
@@ -495,7 +499,7 @@ function updatePlayState() {
   const ok = looksLikeHtml($("content").value);
   $("play").disabled = !ok;
   $("play").textContent = ok ? "▶ Play this file" : "▶ Play (build it first)";
-  $("play").title = ok ? "" : "This file is still pseudocode — run “Diff & apply” to build the game, accept it, then Play.";
+  $("play").title = ok ? "" : "This file is still pseudocode — run “Diff & apply” to build the game, then Play.";
 }
 function openPlay() {
   if ($("play").disabled) return;
