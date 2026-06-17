@@ -52,9 +52,18 @@
   #playclose:hover { background: #000d; }
   .spin { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #banner { font-size: .8rem; text-align: center; padding: .5rem 1rem; margin: -1.5rem -1rem 1.2rem;
+            border-bottom: 1px solid #8883; background: #8881; }
+  #banner a { font-size: inherit; }
+  #banner .sep { opacity: .4; margin: 0 .5rem; }
 </style>
 </head>
 <body>
+<div id="banner">
+  <a href="https://github.com/255BITS/gptdiff-js" target="_blank" rel="noopener">gptdiff-js</a> — run gptdiff in the browser, no command line
+  <span class="sep">·</span>
+  <a href="https://github.com/255BITS/gptdiff-js-examples" target="_blank" rel="noopener">more examples</a>
+</div>
 <header>
   <h1>gptdiff · diff → smartapply</h1>
   <span id="status">checking…</span>
@@ -320,7 +329,7 @@ function modelButton(m) {
 function renderModelList() {
   const q = $("modelsearch").value.trim().toLowerCase();
   const matches = (allModels || []).filter((m) => m.id.toLowerCase().includes(q));
-  const shown = matches.slice(0, 200);
+  const shown = matches;
   $("modellist").innerHTML = "";
   let dividerPlaced = !!q; // no top/rest split while searching
   for (const m of shown) {
@@ -330,7 +339,7 @@ function renderModelList() {
     }
     $("modellist").appendChild(modelButton(m));
   }
-  $("modelcount").textContent = `${matches.length} match${matches.length === 1 ? "" : "es"}` + (matches.length > shown.length ? ` (showing ${shown.length})` : "");
+  $("modelcount").textContent = `${matches.length} match${matches.length === 1 ? "" : "es"}`;
 }
 
 for (const btn of document.querySelectorAll(".modelchange")) {

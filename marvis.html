@@ -520,7 +520,7 @@ function modelButton(m) {
 function renderModelList() {
   const q = $("modelsearch").value.trim().toLowerCase();
   const matches = (allModels || []).filter((m) => m.id.toLowerCase().includes(q));
-  const shown = matches.slice(0, 200);
+  const shown = matches;
   $("modellist").innerHTML = "";
   let dividerPlaced = !!q;
   for (const m of shown) {
@@ -530,7 +530,7 @@ function renderModelList() {
     }
     $("modellist").appendChild(modelButton(m));
   }
-  $("modelcount").textContent = `${matches.length} match${matches.length === 1 ? "" : "es"}` + (matches.length > shown.length ? ` (showing ${shown.length})` : "");
+  $("modelcount").textContent = `${matches.length} match${matches.length === 1 ? "" : "es"}`;
 }
 for (const btn of document.querySelectorAll(".modelchange")) {
   btn.addEventListener("click", async () => {
